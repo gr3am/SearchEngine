@@ -4,7 +4,7 @@ server:
 spring:
   datasource:
     username: root
-    password: mysql1358
+    password: 
     url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
   jpa:
     properties:
@@ -22,3 +22,14 @@ indexing-settings:
       name: Skillbox
     - url: https://www.playback.ru
       name: PlayBack.Ru
+
+indexing:
+  userAgent: "HeliontSearchBot"
+  referrer: "http://www.google.com"
+  minDelayMillis: 500
+  maxDelayMillis: 5000
+  sites:
+    - url: "http://www.playback.ru/"
+      name: "Playback"
+    - url: "https://volochek.life/"
+      name: "Volochek Life"
