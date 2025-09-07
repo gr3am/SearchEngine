@@ -5,12 +5,11 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.transaction.support.TransactionTemplate;
 import searchengine.config.IndexingConfig;
 import searchengine.model.Page;
 import searchengine.model.Site;
+import searchengine.model.Status;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 
@@ -23,8 +22,6 @@ import java.util.concurrent.RecursiveAction;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class SiteCrawler extends RecursiveAction {
-    private static final Logger logger = LoggerFactory.getLogger(SiteCrawler.class);
-
     private final String url;
     private final Site site;
     private final IndexingConfig indexingConfig;
@@ -32,6 +29,7 @@ public class SiteCrawler extends RecursiveAction {
     private final PageRepository pageRepository;
     private final Set<String> visited;
     private final TransactionTemplate transactionTemplate;
+    private static volatile boolean stopped = false;
 
     public SiteCrawler(Site site, String url, IndexingConfig indexingConfig,
                        SiteRepository siteRepository, PageRepository pageRepository,
@@ -47,23 +45,13 @@ public class SiteCrawler extends RecursiveAction {
 
     @Override
     protected void compute() {
-        if (Thread.currentThread().isInterrupted()) {
-            logger.debug("Поток прерван, пропускаем URL: {}", url);
+        if (stopped || Thread.currentThread().isInterrupted()) {
             return;
         }
 
         String path = getPath(url, site.getUrl());
-        if (path == null) {
-            logger.debug("Некорректный путь, пропускаем URL: {}", url);
-            return;
-        }
-
-        if (!visited.add(path)) {
-            logger.debug("URL уже посещен: {}", url);
-            return;
-        }
-
-        logger.info("Обрабатываем URL: {}", url);
+        if (path == null) return;
+        if (!visited.add(path)) return;
 
         try {
             Thread.sleep(getRandomDelay());
@@ -94,71 +82,76 @@ public class SiteCrawler extends RecursiveAction {
                 content = "";
             }
 
-            transactionTemplate.execute(status -> {
-                Page page = new Page();
-                page.setSite(site);
-                page.setPath(path);
-                page.setCode(code);
-                page.setContent(content);
-                pageRepository.save(page);
-                return null;
-            });
+            if (!stopped) {
+                transactionTemplate.execute(status -> {
+                    Page page = new Page();
+                    page.setSite(site);
+                    page.setPath(path);
+                    page.setCode(code);
+                    page.setContent(content);
+                    pageRepository.save(page);
+                    return null;
+                });
 
-            transactionTemplate.execute(status -> {
-                Site currentSite = siteRepository.findById(site.getId()).orElse(null);
-                if (currentSite != null) {
-                    currentSite.setStatusTime(LocalDateTime.now());
-                    siteRepository.save(currentSite);
-                }
-                return null;
-            });
+                transactionTemplate.execute(status -> {
+                    Site currentSite = siteRepository.findById(site.getId()).orElse(null);
+                    if (currentSite != null && currentSite.getStatus() == Status.INDEXING) {
+                        currentSite.setStatusTime(LocalDateTime.now());
+                        siteRepository.save(currentSite);
+                    }
+                    return null;
+                });
+            }
 
             if (doc != null) {
                 Elements links = doc.select("a[href]");
                 List<SiteCrawler> subtasks = new ArrayList<>();
 
                 for (Element link : links) {
-                    if (Thread.currentThread().isInterrupted()) {
+                    if (stopped || Thread.currentThread().isInterrupted()) {
                         return;
                     }
 
                     String absUrl = link.absUrl("href");
-                    if (absUrl == null || absUrl.isBlank()) continue;
-                    if (!absUrl.startsWith(site.getUrl())) continue;
+                    if (!isValidLink(absUrl, site.getUrl(), visited)) continue;
 
-                    int hash = absUrl.indexOf('#');
-                    if (hash >= 0) absUrl = absUrl.substring(0, hash);
-
-                    String childPath = getPath(absUrl, site.getUrl());
-                    if (childPath == null) continue;
-
-                    if (!visited.contains(childPath)) {
-                        subtasks.add(new SiteCrawler(site, absUrl, indexingConfig,
-                                siteRepository, pageRepository, visited, transactionTemplate));
-                    }
+                    subtasks.add(new SiteCrawler(site, absUrl, indexingConfig,
+                            siteRepository, pageRepository, visited, transactionTemplate));
                 }
 
-                for (SiteCrawler subtask : subtasks) {
-                    subtask.fork();
-                }
-                for (SiteCrawler subtask : subtasks) {
-                    subtask.join();
-                }
+                invokeAll(subtasks);
             }
 
         } catch (Exception e) {
-            logger.error("Ошибка при обработке URL: {}", url, e);
-            transactionTemplate.execute(status -> {
-                Site currentSite = siteRepository.findById(site.getId()).orElse(null);
-                if (currentSite != null) {
-                    currentSite.setLastError("Ошибка обхода: " + e.getMessage());
-                    currentSite.setStatusTime(LocalDateTime.now());
-                    siteRepository.save(currentSite);
-                }
-                return null;
-            });
+            if (!stopped) {
+                transactionTemplate.execute(status -> {
+                    Site currentSite = siteRepository.findById(site.getId()).orElse(null);
+                    if (currentSite != null) {
+                        currentSite.setLastError("Ошибка обхода: " + e.getMessage());
+                        currentSite.setStatusTime(LocalDateTime.now());
+                        siteRepository.save(currentSite);
+                    }
+                    return null;
+                });
+            }
         }
     }
+
+    private boolean isValidLink(String link, String rootUrl, Set<String> visited) {
+        if (link == null || link.isBlank()) return false;
+        if (!link.startsWith(rootUrl)) return false;
+
+        int hash = link.indexOf('#');
+        if (hash >= 0) link = link.substring(0, hash);
+
+        if (link.matches(".*(\\.(jpg|jpeg|png|gif|bmp|ico|svg|pdf|doc|docx|xls|xlsx|zip|rar|mp4|avi|mov|wmv|css|js))$")) {
+            return false;
+        }
+
+        String path = getPath(link, rootUrl);
+        return path != null && !visited.contains(path); // только проверяем
+    }
+
 
     private int getRandomDelay() {
         return ThreadLocalRandom.current().nextInt(indexingConfig.getMinDelayMillis(),
@@ -170,5 +163,13 @@ public class SiteCrawler extends RecursiveAction {
         String path = url.substring(siteUrl.length());
         if (path.isEmpty()) return "/";
         return path.startsWith("/") ? path : "/" + path;
+    }
+
+    public static void stop() {
+        stopped = true;
+    }
+
+    public static void reset() {
+        stopped = false;
     }
 }

@@ -17,6 +17,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 @RequiredArgsConstructor
 @Service
@@ -33,17 +34,16 @@ public class IndexingServiceImpl implements IndexingService {
             return false;
         }
 
+        SiteCrawler.reset();
+
         for (SiteConfig siteConfig : indexingConfig.getSites()) {
-            transactionTemplate.execute(status -> {
+            Site site = transactionTemplate.execute(status -> {
                 siteRepository.findByUrl(siteConfig.getUrl())
                         .ifPresent(oldSite -> {
                             pageRepository.deleteBySite(oldSite);
                             siteRepository.delete(oldSite);
                         });
-                return null;
-            });
 
-            Site site = transactionTemplate.execute(status -> {
                 Site newSite = new Site();
                 newSite.setStatus(Status.INDEXING);
                 newSite.setStatusTime(LocalDateTime.now());
@@ -63,26 +63,17 @@ public class IndexingServiceImpl implements IndexingService {
                     forkJoinPool.execute(siteCrawler);
                     forkJoinPool.awaitQuiescence(Long.MAX_VALUE, TimeUnit.DAYS);
 
-                    Site finished = transactionTemplate.execute(status ->
-                            siteRepository.findById(site.getId()).orElse(null));
-
-                    if (finished != null && finished.getStatus() == Status.INDEXING) {
-                        transactionTemplate.execute(status -> {
-                            finished.setStatus(Status.INDEXED);
-                            finished.setStatusTime(LocalDateTime.now());
-                            return siteRepository.save(finished);
-                        });
-                    }
-                } catch (Exception e) {
-                    transactionTemplate.execute(status -> {
-                        Site failed = siteRepository.findById(site.getId()).orElse(null);
-                        if (failed != null) {
-                            failed.setStatus(Status.FAILED);
-                            failed.setLastError("Ошибка индексации: " + e.getMessage());
-                            failed.setStatusTime(LocalDateTime.now());
-                            siteRepository.save(failed);
+                    updateSite(site.getId(), s -> {
+                        if (s.getStatus() == Status.INDEXING) {
+                            s.setStatus(Status.INDEXED);
+                            s.setStatusTime(LocalDateTime.now());
                         }
-                        return null;
+                    });
+                } catch (Exception e) {
+                    updateSite(site.getId(), s -> {
+                        s.setStatus(Status.FAILED);
+                        s.setLastError("Ошибка индексации: " + e.getMessage());
+                        s.setStatusTime(LocalDateTime.now());
                     });
                 } finally {
                     forkJoinPool.shutdown();
@@ -98,6 +89,8 @@ public class IndexingServiceImpl implements IndexingService {
         if (!isIndexingInProgress()) {
             return false;
         }
+
+        SiteCrawler.stop();
 
         runningPools.values().forEach(ForkJoinPool::shutdownNow);
 
@@ -119,5 +112,15 @@ public class IndexingServiceImpl implements IndexingService {
 
     public boolean isIndexingInProgress() {
         return runningPools.values().stream().anyMatch(pool -> !pool.isTerminated());
+    }
+
+    private void updateSite(Integer siteId, Consumer<Site> updater) {
+        transactionTemplate.execute(status -> {
+            siteRepository.findById(siteId).ifPresent(site -> {
+                updater.accept(site);
+                siteRepository.save(site);
+            });
+            return null;
+        });
     }
 }
