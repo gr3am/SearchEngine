@@ -1,4 +1,4 @@
-package searchengine.services.crawler;
+package searchengine.services.tools;
 
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
