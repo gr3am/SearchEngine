@@ -44,10 +44,6 @@ public class LemmaFinder {
         return lemmas;
     }
 
-    public Set<String> getLemmaSet(String text) {
-        return collectLemmas(text).keySet();
-    }
-
     private boolean anyWordBaseBelongToParticle(List<String> wordBaseForms) {
         return wordBaseForms.stream()
                 .map(String::toUpperCase)
