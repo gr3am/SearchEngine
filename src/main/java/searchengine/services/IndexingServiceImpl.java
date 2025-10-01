@@ -7,7 +7,9 @@ import searchengine.config.IndexingConfig;
 import searchengine.config.SiteConfig;
 import searchengine.model.Site;
 import searchengine.model.Status;
+import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
+import searchengine.repositories.SearchIndexRepository;
 import searchengine.repositories.SiteRepository;
 import searchengine.services.tools.SiteCrawler;
 
@@ -24,6 +26,8 @@ import java.util.function.Consumer;
 public class IndexingServiceImpl implements IndexingService {
     private final SiteRepository siteRepository;
     private final PageRepository pageRepository;
+    private final SearchIndexRepository searchIndexRepository;
+    private final LemmaRepository lemmaRepository;
     private final IndexingConfig indexingConfig;
     private final TransactionTemplate transactionTemplate;
     private final Map<Integer, ForkJoinPool> runningPools = new ConcurrentHashMap<>();
@@ -41,6 +45,8 @@ public class IndexingServiceImpl implements IndexingService {
             Site site = transactionTemplate.execute(status -> {
                 siteRepository.findByUrl(siteConfig.getUrl())
                         .ifPresent(oldSite -> {
+                            searchIndexRepository.deleteAll();
+                            lemmaRepository.deleteAll();
                             pageRepository.deleteBySite(oldSite);
                             siteRepository.delete(oldSite);
                         });
