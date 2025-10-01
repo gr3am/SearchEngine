@@ -27,6 +27,7 @@ public class IndexingServiceImpl implements IndexingService {
     private final IndexingConfig indexingConfig;
     private final TransactionTemplate transactionTemplate;
     private final Map<Integer, ForkJoinPool> runningPools = new ConcurrentHashMap<>();
+    private final PageIndexingService pageIndexingService;
 
     @Override
     public boolean startIndexing() {
@@ -54,7 +55,7 @@ public class IndexingServiceImpl implements IndexingService {
 
             ForkJoinPool forkJoinPool = new ForkJoinPool();
             SiteCrawler siteCrawler = new SiteCrawler(site, site.getUrl(), indexingConfig,
-                    siteRepository, pageRepository, null, transactionTemplate);
+                    siteRepository, pageRepository, null, transactionTemplate, pageIndexingService);
 
             runningPools.put(site.getId(), forkJoinPool);
 

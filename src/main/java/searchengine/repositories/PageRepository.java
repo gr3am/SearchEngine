@@ -11,4 +11,6 @@ import java.util.Optional;
 public interface PageRepository extends JpaRepository<Page, Integer> {
     void deleteBySite(Site site);
     Optional<Page> findByPathAndSite(String path, Site site);
+    long count();
+    int countBySiteId(int siteId);
 }

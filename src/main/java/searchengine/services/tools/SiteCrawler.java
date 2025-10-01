@@ -12,6 +12,7 @@ import searchengine.model.Site;
 import searchengine.model.Status;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
+import searchengine.services.PageIndexingService;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -29,11 +30,12 @@ public class SiteCrawler extends RecursiveAction {
     private final PageRepository pageRepository;
     private final Set<String> visited;
     private final TransactionTemplate transactionTemplate;
+    private final PageIndexingService pageIndexingService;
     private static volatile boolean stopped = false;
 
     public SiteCrawler(Site site, String url, IndexingConfig indexingConfig,
                        SiteRepository siteRepository, PageRepository pageRepository,
-                       Set<String> visited, TransactionTemplate transactionTemplate) {
+                       Set<String> visited, TransactionTemplate transactionTemplate, PageIndexingService pageIndexingService) {
         this.site = site;
         this.url = url;
         this.indexingConfig = indexingConfig;
@@ -41,6 +43,7 @@ public class SiteCrawler extends RecursiveAction {
         this.pageRepository = pageRepository;
         this.visited = (visited != null) ? visited : ConcurrentHashMap.newKeySet();
         this.transactionTemplate = transactionTemplate;
+        this.pageIndexingService = pageIndexingService;
     }
 
     @Override
@@ -73,25 +76,13 @@ public class SiteCrawler extends RecursiveAction {
             boolean isHtml = contentType != null && contentType.toLowerCase().startsWith("text/html");
 
             Document doc = null;
-            String content;
 
             if (code < 400 && isHtml) {
                 doc = response.parse();
-                content = doc.outerHtml();
-            } else {
-                content = "";
             }
 
             if (!stopped) {
-                transactionTemplate.execute(status -> {
-                    Page page = new Page();
-                    page.setSite(site);
-                    page.setPath(path);
-                    page.setCode(code);
-                    page.setContent(content);
-                    pageRepository.save(page);
-                    return null;
-                });
+                pageIndexingService.indexPage(url);
 
                 transactionTemplate.execute(status -> {
                     Site currentSite = siteRepository.findById(site.getId()).orElse(null);
@@ -116,7 +107,7 @@ public class SiteCrawler extends RecursiveAction {
                     if (!isValidLink(absUrl, site.getUrl(), visited)) continue;
 
                     subtasks.add(new SiteCrawler(site, absUrl, indexingConfig,
-                            siteRepository, pageRepository, visited, transactionTemplate));
+                            siteRepository, pageRepository, visited, transactionTemplate, pageIndexingService));
                 }
 
                 invokeAll(subtasks);

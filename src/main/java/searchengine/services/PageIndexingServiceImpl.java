@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import searchengine.config.IndexingConfig;
 import searchengine.model.Lemma;
 import searchengine.model.Page;
 import searchengine.model.SearchIndex;
@@ -25,7 +27,9 @@ public class PageIndexingServiceImpl implements PageIndexingService {
     private final SearchIndexRepository searchIndexRepository;
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
+    private final IndexingConfig indexingConfig;
 
+    @Transactional
     @Override
     public boolean indexPage(String url) {
         String rootUrl = getRootUrl(url);
@@ -37,7 +41,13 @@ public class PageIndexingServiceImpl implements PageIndexingService {
         try {
             LemmaFinder lemmaFinder = LemmaFinder.getInstance();
 
-            Connection.Response response = Jsoup.connect(url).execute();
+            Connection.Response response = Jsoup.connect(url)
+                    .userAgent(indexingConfig.getUserAgent())
+                    .referrer(indexingConfig.getReferrer())
+                    .timeout(10000)
+                    .ignoreHttpErrors(true)
+                    .execute();
+
             String html = response.body();
             String text = lemmaFinder.clearHtml(html);
 
@@ -47,6 +57,7 @@ public class PageIndexingServiceImpl implements PageIndexingService {
 
             pageRepository.findByPathAndSite(path, site).ifPresent(oldPage -> {
                 searchIndexRepository.deleteByPage(oldPage);
+                lemmaRepository.deleteBySite(site);
                 pageRepository.delete(oldPage);
             });
 
@@ -54,7 +65,13 @@ public class PageIndexingServiceImpl implements PageIndexingService {
             page.setSite(site);
             page.setPath(path);
             page.setCode(response.statusCode());
-            page.setContent(html);
+
+            if (response.statusCode() < 400) {
+                page.setContent(html);
+            } else {
+                page.setContent("");
+            }
+
             pageRepository.save(page);
 
             Map<String, Integer> lemmas = lemmaFinder.collectLemmas(text);
