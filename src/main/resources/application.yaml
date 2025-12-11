@@ -33,3 +33,7 @@ indexing:
       name: "Playback"
     - url: "https://volochek.life/"
       name: "Volochek Life"
+
+search:
+  max-lemma-share: 0.7
+  snippet-length: 200

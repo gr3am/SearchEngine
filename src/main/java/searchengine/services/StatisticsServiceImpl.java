@@ -12,9 +12,7 @@ import searchengine.dto.statistics.StatisticsData;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.dto.statistics.TotalStatistics;
 
-import java.time.ZoneOffset;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -44,7 +42,7 @@ public class StatisticsServiceImpl implements StatisticsService {
             item.setName(site.getName());
             item.setUrl(site.getUrl());
             item.setStatus(site.getStatus().name());
-            item.setStatusTime(site.getStatusTime().toEpochSecond(ZoneOffset.UTC));
+            item.setStatusTime(site.getStatusTime());
             item.setError(site.getLastError());
 
             int pagesCount = pageRepository.countBySiteId(site.getId());
@@ -53,7 +51,7 @@ public class StatisticsServiceImpl implements StatisticsService {
             item.setLemmas(lemmasCount);
 
             return item;
-        }).collect(Collectors.toList());
+        }).toList();
 
         StatisticsData data = new StatisticsData();
         data.setTotal(total);

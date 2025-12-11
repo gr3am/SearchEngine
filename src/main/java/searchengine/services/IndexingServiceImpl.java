@@ -73,6 +73,9 @@ public class IndexingServiceImpl implements IndexingService {
                     updateSite(site.getId(), s -> {
                         if (s.getStatus() == Status.INDEXING) {
                             s.setStatus(Status.INDEXED);
+                            if (s.getLastError() == null) {
+                                s.setLastError("Проиндексирован без ошибок");
+                            }
                             s.setStatusTime(LocalDateTime.now());
                         }
                     });

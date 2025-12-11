@@ -6,9 +6,7 @@ import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.IndexingConfig;
-import searchengine.model.Lemma;
-import searchengine.model.Page;
-import searchengine.model.SearchIndex;
+import searchengine.model.*;
 import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SearchIndexRepository;
@@ -18,6 +16,7 @@ import searchengine.services.tools.LemmaFinder;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @RequiredArgsConstructor
@@ -66,12 +65,15 @@ public class PageIndexingServiceImpl implements PageIndexingService {
             page.setPath(path);
             page.setCode(response.statusCode());
 
+            site.setStatusTime(LocalDateTime.now());
+
             if (response.statusCode() < 400) {
                 page.setContent(html);
             } else {
                 page.setContent("");
             }
 
+            siteRepository.save(site);
             pageRepository.save(page);
 
             Map<String, Integer> lemmas = lemmaFinder.collectLemmas(text);
@@ -100,7 +102,6 @@ public class PageIndexingServiceImpl implements PageIndexingService {
             }
 
         } catch (IOException e) {
-            e.printStackTrace();
             return false;
         }
 

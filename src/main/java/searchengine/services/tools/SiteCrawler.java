@@ -7,7 +7,6 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.transaction.support.TransactionTemplate;
 import searchengine.config.IndexingConfig;
-import searchengine.model.Page;
 import searchengine.model.Site;
 import searchengine.model.Status;
 import searchengine.repositories.PageRepository;
@@ -140,7 +139,7 @@ public class SiteCrawler extends RecursiveAction {
         }
 
         String path = getPath(link, rootUrl);
-        return path != null && !visited.contains(path); // только проверяем
+        return path != null && !visited.contains(path);
     }
 
 

@@ -13,4 +13,5 @@ public interface LemmaRepository extends JpaRepository<Lemma, Integer> {
     void deleteBySite(Site site);
     long count();
     int countBySiteId(int siteId);
+    Long findTotalFrequencyByLemma(String lemma);
 }

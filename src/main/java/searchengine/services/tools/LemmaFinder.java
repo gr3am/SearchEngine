@@ -20,10 +20,6 @@ public class LemmaFinder {
         this.luceneMorphology = luceneMorphology;
     }
 
-    private LemmaFinder() {
-        throw new RuntimeException("Disallow construct");
-    }
-
     public Map<String, Integer> collectLemmas(String text) {
         String[] words = splitToRussianWords(text);
         Map<String, Integer> lemmas = new HashMap<>();
