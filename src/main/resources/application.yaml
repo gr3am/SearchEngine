@@ -31,8 +31,8 @@ indexing:
   sites:
     - url: "http://www.playback.ru/"
       name: "Playback"
-#    - url: "https://volochek.life/"
-#      name: "Volochek Life"
+    - url: "https://volochek.life/"
+      name: "Volochek Life"
 
 search:
   max-lemma-share: 0.7

@@ -54,7 +54,7 @@ public class SearchServiceImpl implements SearchService {
                 }
             }
 
-            if (pageIds.isEmpty()) return SearchResponseDto.okEmpty();
+            if (pageIds == null || pageIds.isEmpty()) return SearchResponseDto.okEmpty();
 
             Map<Integer, Float> absRelevance = calculateAbsRelevance(pageIds, filteredLemmas);
             Map<Integer, Float> relRelevance = new HashMap<>();
